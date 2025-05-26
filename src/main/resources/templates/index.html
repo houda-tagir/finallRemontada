@@ -3,83 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StackOverflow Tag Trend Analyzer</title>
-
-    <!-- Bootstrap CSS -->
-    <link rel="stylesheet" th:href="@{/webjars/bootstrap/5.2.3/css/bootstrap.min.css}">
-
-    <!-- Custom CSS -->
+    <title>StackOverflow Trend Analyzer</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stomp-websocket@2.3.4/lib/stomp.min.js"></script>
     <style>
-        .trend-chart-container {
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-bottom: 20px;
+        }
+        .distribution-chart-container {
+            position: relative;
             height: 400px;
-            margin-bottom: 30px;
-        }
-        .tag-card {
-            transition: all 0.3s ease;
-            cursor: pointer;
-        }
-        .tag-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
-        }
-        .dashboard-header {
-            background-color: #f8f9fa;
-            padding: 20px 0;
-            margin-bottom: 30px;
-            border-bottom: 1px solid #e9ecef;
+            margin-bottom: 20px;
         }
     </style>
 </head>
 <body>
-<header class="dashboard-header">
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark">
     <div class="container">
-        <div class="row align-items-center">
-            <div class="col-md-8">
-                <h1>StackOverflow Tag Trend Analyzer</h1>
-                <p class="lead">Real-time analysis of StackOverflow tag trends</p>
-            </div>
-            <div class="col-md-4 text-end">
-                <button id="refreshBtn" class="btn btn-primary">
-                    <i class="bi bi-arrow-repeat"></i> Refresh Data
-                </button>
-            </div>
+        <a class="navbar-brand" href="/">StackOverflow Trend Analyzer</a>
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+        <div class="collapse navbar-collapse" id="navbarNav">
+            <ul class="navbar-nav">
+                <li class="nav-item">
+                    <a class="nav-link active" href="/">Dashboard</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/tags">Tags</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/compare">Compare</a>
+                </li>
+            </ul>
         </div>
     </div>
-</header>
+</nav>
 
-<div class="container">
-    <div class="row mb-4">
+<div class="container mt-4">
+    <div class="row">
         <div class="col-12">
             <div class="card">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5>Real-time Tag Trends</h5>
-                    <div class="btn-group" role="group">
-                        <button type="button" class="btn btn-outline-primary active" data-period="day">Day</button>
-                        <button type="button" class="btn btn-outline-primary" data-period="week">Week</button>
-                        <button type="button" class="btn btn-outline-primary" data-period="month">Month</button>
-                    </div>
+                    <h5 class="mb-0">Tag Distribution (Last 24 Hours)</h5>
+                    <span class="badge bg-primary" id="connection-status">Connecting...</span>
                 </div>
                 <div class="card-body">
-                    <div class="trend-chart-container">
-                        <canvas id="trendChart"></canvas>
+                    <div class="distribution-chart-container">
+                        <canvas id="distributionChart"></canvas>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <div class="row">
+    <div class="row mt-4">
         <div class="col-12">
-            <h3>Top Tags</h3>
-            <div class="row" id="tagCards">
-                <div th:each="tag : ${topTags}" class="col-md-3 mb-4">
-                    <div class="card tag-card h-100" th:onclick="'window.location.href=\'/tag/' + ${tag} + '\''">
-                        <div class="card-body">
-                            <h5 class="card-title" th:text="${tag}">Tag Name</h5>
-                            <div class="tag-trend-mini" th:attr="data-tag=${tag}">
-                                <canvas th:id="'miniChart-' + ${tag}"></canvas>
-                            </div>
-                        </div>
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0">Tag Trends (Last 24 Hours)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="chart-container">
+                        <canvas id="trendChart"></canvas>
                     </div>
                 </div>
             </div>
@@ -87,14 +77,219 @@
     </div>
 </div>
 
-<!-- JavaScript Libraries -->
-<script th:src="@{/webjars/jquery/3.6.4/jquery.min.js}"></script>
-<script th:src="@{/webjars/bootstrap/5.2.3/js/bootstrap.bundle.min.js}"></script>
-<script th:src="@{/webjars/chartjs/4.1.2/chart.umd.js}"></script>
-<script th:src="@{/webjars/sockjs-client/1.5.1/sockjs.min.js}"></script>
-<script th:src="@{/webjars/stomp-websocket/2.3.4/stomp.min.js}"></script>
+<script th:inline="javascript">
+    // Initialize data from server
+    const initialTagTrends = /*[[${tagTrends}]]*/ {};
+    const initialTagDistribution = /*[[${tagDistribution}]]*/ {};
+    const topTags = /*[[${topTags}]]*/ [];
 
-<!-- Custom JavaScript -->
-<script th:src="@{/js/trend-analyzer.js}"></script>
+    // Chart objects
+    let trendChart;
+    let distributionChart;
+
+    // WebSocket connection
+    let stompClient = null;
+
+    function connect() {
+        const socket = new SockJS('/websocket');
+        stompClient = Stomp.over(socket);
+
+        stompClient.connect({}, function(frame) {
+            document.getElementById('connection-status').textContent = 'Connected';
+            document.getElementById('connection-status').classList.remove('bg-primary');
+            document.getElementById('connection-status').classList.add('bg-success');
+
+            // Subscribe to trend updates
+            stompClient.subscribe('/topic/trends', function(message) {
+                const trendData = JSON.parse(message.body);
+                updateTrendChart(trendData);
+            });
+
+            // Subscribe to distribution updates
+            stompClient.subscribe('/topic/distribution', function(message) {
+                const distributionData = JSON.parse(message.body);
+                updateDistributionChart(distributionData);
+            });
+        }, function(error) {
+            document.getElementById('connection-status').textContent = 'Disconnected';
+            document.getElementById('connection-status').classList.remove('bg-primary');
+            document.getElementById('connection-status').classList.add('bg-danger');
+            setTimeout(connect, 5000); // Try to reconnect after 5 seconds
+        });
+    }
+
+    function initializeTrendChart() {
+        const ctx = document.getElementById('trendChart').getContext('2d');
+
+        // Prepare data for Chart.js
+        const datasets = [];
+        const labels = [];
+
+        // If we have data for at least one tag
+        if (initialTagTrends && Object.keys(initialTagTrends).length > 0) {
+            // Use the first tag's timestamps as labels
+            const firstTag = Object.keys(initialTagTrends)[0];
+            const trends = initialTagTrends[firstTag];
+
+            if (trends && trends.length > 0) {
+                for (const trend of trends) {
+                    // Format timestamp as 'HH:MM'
+                    const date = new Date(trend.timestamp);
+                    labels.push(date.getHours() + ':00');
+                }
+
+                // Create a dataset for each tag
+                const colors = [
+                    'rgba(255, 99, 132, 0.7)',
+                    'rgba(54, 162, 235, 0.7)',
+                    'rgba(255, 206, 86, 0.7)',
+                    'rgba(75, 192, 192, 0.7)',
+                    'rgba(153, 102, 255, 0.7)'
+                ];
+
+                let colorIndex = 0;
+                for (const tag in initialTagTrends) {
+                    const tagTrends = initialTagTrends[tag];
+                    const data = tagTrends.map(trend => trend.count);
+
+                    datasets.push({
+                        label: tag,
+                        data: data,
+                        backgroundColor: colors[colorIndex % colors.length],
+                        borderColor: colors[colorIndex % colors.length].replace('0.7', '1'),
+                        borderWidth: 2,
+                        tension: 0.4
+                    });
+
+                    colorIndex++;
+                }
+            }
+        }
+
+        trendChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Question Count'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Hour'
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function initializeDistributionChart() {
+        const ctx = document.getElementById('distributionChart').getContext('2d');
+
+        // Prepare data for Chart.js
+        const labels = [];
+        const data = [];
+        const backgroundColors = [];
+
+        if (initialTagDistribution) {
+            const colors = [
+                'rgba(255, 99, 132, 0.7)',
+                'rgba(54, 162, 235, 0.7)',
+                'rgba(255, 206, 86, 0.7)',
+                'rgba(75, 192, 192, 0.7)',
+                'rgba(153, 102, 255, 0.7)',
+                'rgba(255, 159, 64, 0.7)',
+                'rgba(199, 199, 199, 0.7)',
+                'rgba(83, 102, 255, 0.7)',
+                'rgba(78, 205, 196, 0.7)',
+                'rgba(197, 108, 240, 0.7)'
+            ];
+
+            let i = 0;
+            for (const tag in initialTagDistribution) {
+                labels.push(tag);
+                data.push(initialTagDistribution[tag]);
+                backgroundColors.push(colors[i % colors.length]);
+                i++;
+            }
+        }
+
+        distributionChart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: backgroundColors,
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right'
+                    }
+                }
+            }
+        });
+    }
+
+    function updateTrendChart(trendData) {
+        if (!trendChart) return;
+
+        // Update the existing datasets with new data
+        for (let i = 0; i < trendChart.data.datasets.length; i++) {
+            const dataset = trendChart.data.datasets[i];
+            const tag = dataset.label;
+
+            if (trendData[tag]) {
+                dataset.data = trendData[tag].map(trend => trend.count);
+            }
+        }
+
+        trendChart.update();
+    }
+
+    function updateDistributionChart(distributionData) {
+        if (!distributionChart) return;
+
+        const labels = [];
+        const data = [];
+        const backgroundColors = distributionChart.data.datasets[0].backgroundColor;
+
+        let i = 0;
+        for (const tag in distributionData) {
+            labels.push(tag);
+            data.push(distributionData[tag]);
+            i++;
+        }
+
+        distributionChart.data.labels = labels;
+        distributionChart.data.datasets[0].data = data;
+        distributionChart.update();
+    }
+
+    // Initialize charts on page load
+    window.onload = function() {
+        initializeTrendChart();
+        initializeDistributionChart();
+        connect();
+    };
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>
