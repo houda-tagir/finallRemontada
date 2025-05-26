@@ -1,40 +1,53 @@
 version: '3'
 
 services:
-  # HBase (includes ZooKeeper)
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.0.1
+    hostname: zookeeper
+    container_name: zookeeper
+    ports:
+      - "2181:2181"
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - kafka_net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.0.1
+    hostname: kafka
+    container_name: kafka
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,PLAINTEXT_HOST://0.0.0.0:29092
+    networks:
+      - kafka_net
+
   hbase:
     image: harisekhon/hbase:1.4
     container_name: hbase
     ports:
-      - "16000:16000"  # HBase Master
-      - "16010:16010"  # HBase Master Web UI
-      - "16020:16020"  # HBase RegionServer
-      - "16030:16030"  # HBase RegionServer Web UI
-      - "2181:2181"    # ZooKeeper
+      - "16010:16010"
+      - "16000:16000"
+      - "16020:16020"
+      - "9090:9090"
     environment:
-      - HBASE_MANAGES_ZK=true
-    volumes:
-      - hbase_data:/hbase-data
-    networks:
-      - stackoverflow-network
-
-  # The Spring Boot Application
-  app:
-    build: .
-    container_name: stackoverflow-analyzer
-    ports:
-      - "8080:8080"
+      HBASE_HEAPSIZE: 1G
+      ZOOKEEPER_QUORUM: zookeeper
     depends_on:
-      - hbase
-    environment:
-      - SPRING_PROFILES_ACTIVE=docker
-      - HBASE_ZOOKEEPER_QUORUM=hbase
+      - zookeeper
     networks:
-      - stackoverflow-network
-
-volumes:
-  hbase_data:
+      - kafka_net
 
 networks:
-  stackoverflow-network:
+  kafka_net:
     driver: bridge
+

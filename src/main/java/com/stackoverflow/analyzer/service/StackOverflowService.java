@@ -2,12 +2,14 @@ package com.stackoverflow.analyzer.service;
 
 import com.stackoverflow.analyzer.model.StackOverflowQuestion;
 import com.stackoverflow.analyzer.model.TagTrend;
+import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 
+@Service
 public interface StackOverflowService {
 
     /**
