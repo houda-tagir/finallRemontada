@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StackOverflow Tag Trend Analyzer</title>
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" th:href="@{/webjars/bootstrap/5.2.3/css/bootstrap.min.css}">
+
+    <!-- Custom CSS -->
+    <style>
+        .trend-chart-container {
+            height: 400px;
+            margin-bottom: 30px;
+        }
+        .tag-card {
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+        .tag-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+        }
+        .dashboard-header {
+            background-color: #f8f9fa;
+            padding: 20px 0;
+            margin-bottom: 30px;
+            border-bottom: 1px solid #e9ecef;
+        }
+    </style>
+</head>
+<body>
+<header class="dashboard-header">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h1>StackOverflow Tag Trend Analyzer</h1>
+                <p class="lead">Real-time analysis of StackOverflow tag trends</p>
+            </div>
+            <div class="col-md-4 text-end">
+                <button id="refreshBtn" class="btn btn-primary">
+                    <i class="bi bi-arrow-repeat"></i> Refresh Data
+                </button>
+            </div>
+        </div>
+    </div>
+</header>
+
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5>Real-time Tag Trends</h5>
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-outline-primary active" data-period="day">Day</button>
+                        <button type="button" class="btn btn-outline-primary" data-period="week">Week</button>
+                        <button type="button" class="btn btn-outline-primary" data-period="month">Month</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div class="trend-chart-container">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <h3>Top Tags</h3>
+            <div class="row" id="tagCards">
+                <div th:each="tag : ${topTags}" class="col-md-3 mb-4">
+                    <div class="card tag-card h-100" th:onclick="'window.location.href=\'/tag/' + ${tag} + '\''">
+                        <div class="card-body">
+                            <h5 class="card-title" th:text="${tag}">Tag Name</h5>
+                            <div class="tag-trend-mini" th:attr="data-tag=${tag}">
+                                <canvas th:id="'miniChart-' + ${tag}"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- JavaScript Libraries -->
+<script th:src="@{/webjars/jquery/3.6.4/jquery.min.js}"></script>
+<script th:src="@{/webjars/bootstrap/5.2.3/js/bootstrap.bundle.min.js}"></script>
+<script th:src="@{/webjars/chartjs/4.1.2/chart.umd.js}"></script>
+<script th:src="@{/webjars/sockjs-client/1.5.1/sockjs.min.js}"></script>
+<script th:src="@{/webjars/stomp-websocket/2.3.4/stomp.min.js}"></script>
+
+<!-- Custom JavaScript -->
+<script th:src="@{/js/trend-analyzer.js}"></script>
+</body>
+</html>

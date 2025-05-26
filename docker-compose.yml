@@ -1,0 +1,40 @@
+version: '3'
+
+services:
+  # HBase (includes ZooKeeper)
+  hbase:
+    image: harisekhon/hbase:1.4
+    container_name: hbase
+    ports:
+      - "16000:16000"  # HBase Master
+      - "16010:16010"  # HBase Master Web UI
+      - "16020:16020"  # HBase RegionServer
+      - "16030:16030"  # HBase RegionServer Web UI
+      - "2181:2181"    # ZooKeeper
+    environment:
+      - HBASE_MANAGES_ZK=true
+    volumes:
+      - hbase_data:/hbase-data
+    networks:
+      - stackoverflow-network
+
+  # The Spring Boot Application
+  app:
+    build: .
+    container_name: stackoverflow-analyzer
+    ports:
+      - "8080:8080"
+    depends_on:
+      - hbase
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+      - HBASE_ZOOKEEPER_QUORUM=hbase
+    networks:
+      - stackoverflow-network
+
+volumes:
+  hbase_data:
+
+networks:
+  stackoverflow-network:
+    driver: bridge
